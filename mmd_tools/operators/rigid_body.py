@@ -440,73 +440,60 @@ class RemoveJoint(Operator):
         return { 'FINISHED' }
 
 @register_wrap
-class UpdateRigidBodyWorld(Operator):
-    bl_idname = 'mmd_tools.rigid_body_world_update'
-    bl_label = 'Update Rigid Body World'
-    bl_description = 'Update rigid body world and references of rigid body constraint according to current scene objects (experimental)'
-    bl_options = {'REGISTER', 'UNDO'}
+class BakePhysicsAction(Operator):
+    bl_idname = 'mmd_tools.bake_physics'
+    bl_label = 'Bake Physics'
+    bl_description = 'bake mmd physics bone action'
+    bl_options = {'REGISTER', 'UNDO','PRESET'}
 
-    @staticmethod
-    def __get_rigid_body_world_objects():
-        rigid_body.setRigidBodyWorldEnabled(True)
-        rbw = bpy.context.scene.rigidbody_world
-        if bpy.app.version < (2, 80, 0):
-            if not rbw.group:
-                rbw.group = bpy.data.groups.new('RigidBodyWorld')
-                rbw.group.use_fake_user = True
-            if not rbw.constraints:
-                rbw.constraints = bpy.data.groups.new('RigidBodyConstraints')
-                rbw.constraints.use_fake_user = True
-            return rbw.group.objects, rbw.constraints.objects
+    start = bpy.props.IntProperty(
+        name='start frame',
+        description='start of frame',
+        default=1,
+        )
+    end = bpy.props.IntProperty(
+        name='end frame',
+        description='end of frame',
+        default=240,
+        )
+    step = bpy.props.IntProperty(
+        name='step',
+        description='step',
+        default=2,
+        )
 
-        if not rbw.collection:
-            rbw.collection = bpy.data.collections.new('RigidBodyWorld')
-            rbw.collection.use_fake_user = True
-        if not rbw.constraints:
-            rbw.constraints = bpy.data.collections.new('RigidBodyConstraints')
-            rbw.constraints.use_fake_user = True
-        return rbw.collection.objects, rbw.constraints.objects
-
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None
+        
+    
     def execute(self, context):
-        scene_objs = (bpy.context.scene.objects,)
-        scene_objs += tuple({x.dupli_group.objects for x in scene_objs[0] if x.dupli_type == 'GROUP' and x.dupli_group}) if bpy.app.version < (2, 80, 0)\
-            else tuple({x.instance_collection.objects for x in scene_objs[0] if x.instance_type == 'COLLECTION' and x.instance_collection})
-
-        def _update_group(obj, group):
-            if any((obj in x.values()) for x in scene_objs):
-                if obj not in group.values():
-                    group.link(obj)
-                return True
-            elif obj in group.values():
-                group.unlink(obj)
-            return False
-
-        def _references(obj):
-            yield obj
-            if obj.proxy:
-                yield from _references(obj.proxy)
-            if getattr(obj, 'override_library', None):
-                yield from _references(obj.override_library.reference)
-
-        _find_root = mmd_model.Model.findRoot
-        rb_objs, rbc_objs = self.__get_rigid_body_world_objects()
-        objects = bpy.data.objects
-        table = {}
-
-        for i in (x for x in objects if x.rigid_body):
-            if _update_group(i, rb_objs):
-                rb_map = table.setdefault(_find_root(i), {})
-                if i in rb_map: # means rb_map[i] will replace i
-                    rb_objs.unlink(i)
-                    continue
-                for r in _references(i):
-                    rb_map[r] = i
-
-        for i in (x for x in objects if x.rigid_body_constraint):
-            if _update_group(i, rbc_objs):
-                rbc, root = i.rigid_body_constraint, _find_root(i)
-                rb_map = table.get(root, {})
-                rbc.object1 = rb_map.get(rbc.object1, rbc.object1)
-                rbc.object2 = rb_map.get(rbc.object2, rbc.object2)
-
+        root = mmd_model.Model.findRoot(context.active_object)
+        rig = mmd_model.Model(root)
+        arm = rig.armature()
+        rigidbodyGroup=[]
+        boneGroup=[]
+        rigidbodyGroup=rig.rigidBodies()
+        bpy.ops.object.posemode_toggle()
+        for rb in rigidbodyGroup:
+            boneGroup.append(rb.mmd_rigid.bone)
+            bpy.ops.object.mode_set(mode='POSE')
+            pbone=arm.data.bones.get(rb.mmd_rigid.bone, None)
+            if(int(rb.mmd_rigid.type)==1 or int(rb.mmd_rigid.type)==2):
+                pbone.select=True
+        
+        #bake it
+        bpy.ops.nla.bake(frame_start=self.start \
+        , frame_end=self.end \
+        , step=self.step \
+        , only_selected=True \
+        , visual_keying=True \
+        , clear_constraints=False \
+        , clear_parents=False \
+        , use_current_action=True \
+        , bake_types={'POSE'})
         return { 'FINISHED' }
+    
+    def invoke(self, context, event):
+        vm = context.window_manager
+        return vm.invoke_props_dialog(self)

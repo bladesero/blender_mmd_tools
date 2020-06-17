@@ -17,38 +17,14 @@ class ConvertMaterialsForCycles(Operator):
     bl_description = 'Convert materials of selected objects for Cycles.'
     bl_options = {'REGISTER', 'UNDO'}
 
-    use_principled = bpy.props.BoolProperty(
-        name='Convert to Principled BSDF',
-        description='Convert MMD shader nodes to Principled BSDF as well if enabled',
-        default=False,
-        options={'SKIP_SAVE'},
-        )
-
-    clean_nodes = bpy.props.BoolProperty(
-        name='Clean Nodes',
-        description='Remove redundant nodes as well if enabled. Disable it to keep node data.',
-        default=False,
-        options={'SKIP_SAVE'},
-        )
-
-    @classmethod
-    def poll(cls, context):
-        return next((x for x in context.selected_objects if x.type == 'MESH'), None)
-
-    def draw(self, context):
-        layout = self.layout
-        if cycles_converter.is_principled_bsdf_supported():
-            layout.prop(self, 'use_principled')
-        layout.prop(self, 'clean_nodes')
-
     def execute(self, context):
         try:
             context.scene.render.engine = 'CYCLES'
         except:
             self.report({'ERROR'}, ' * Failed to change to Cycles render engine.')
             return {'CANCELLED'}
-        for obj in (x for x in context.selected_objects if x.type == 'MESH'):
-            cycles_converter.convertToCyclesShader(obj, use_principled=self.use_principled, clean_nodes=self.clean_nodes)
+        for obj in [x for x in context.selected_objects if x.type == 'MESH']:
+            cycles_converter.convertToCyclesShader(obj)
         return {'FINISHED'}
 
 @register_wrap
@@ -362,3 +338,27 @@ class EdgePreviewSetup(Operator):
 
         return shader
 
+@register_wrap
+class ConvertMaterialUniverse(Operator):
+    bl_idname = 'mmd_tools.convert_material_universe'
+    bl_label = 'convert material'
+    bl_description = 'convert to universe material'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object.active_material is not None
+
+    def execute(self,context):
+        for material in bpy.data.materials:
+            if material.node_tree.nodes.get("mmd_shader"):
+                pbr=material.node_tree.nodes.new("ShaderNodeBsdfPrincipled")
+                pbr.location = material.node_tree.nodes["mmd_shader"].location
+                material.node_tree.nodes.remove(material.node_tree.nodes["mmd_shader"])
+                link=material.node_tree.links
+                node=material.node_tree.nodes
+                if material.node_tree.nodes.get('mmd_base_tex'):
+                    link.new(node['mmd_base_tex'].outputs['Color'],node['Principled BSDF'].inputs['Base Color'])
+                    link.new(node['mmd_base_tex'].outputs['Alpha'],node['Principled BSDF'].inputs['Alpha'])
+                    link.new(node['Principled BSDF'].outputs['BSDF'],node["Material Output"].inputs['Surface'])
+        return { 'FINISHED' }

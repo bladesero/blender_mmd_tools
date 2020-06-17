@@ -2,11 +2,11 @@
 
 bl_info = {
     "name": "mmd_tools",
-    "author": "sugiany",
+    "author": "sugiany,powroupi",
     "version": (0, 7, 0),
     "blender": (2, 80, 0),
     "location": "View3D > Tool Shelf > MMD Tools Panel",
-    "description": "Utility tools for MMD model editing. (powroupi's forked version)",
+    "description": "Utility tools for MMD model editing. (bladesero's forked version)",
     "warning": "",
     "wiki_url": "https://github.com/powroupi/blender_mmd_tools/wiki",
     "tracker_url": "https://github.com/powroupi/blender_mmd_tools/issues",
@@ -40,15 +40,19 @@ if "bpy" in locals():
     importlib.reload(properties)
     importlib.reload(operators)
     importlib.reload(panels)
+    importlib.reload(pie)
 else:
     import bpy
     import logging
+    from bpy.types import AddonPreferences
+    from bpy.props import StringProperty
     from bpy.app.handlers import persistent
 
     __make_annotations = (bpy.app.version >= (2, 80, 0))
     from . import properties
     from . import operators
     from . import panels
+    from . import pie
 
 if bpy.app.version < (2, 80, 0):
     bl_info['blender'] = (2, 70, 0)
@@ -57,34 +61,27 @@ logging.basicConfig(format='%(message)s', level=logging.DEBUG)
 
 
 @register_wrap
-class MMDToolsAddonPreferences(bpy.types.AddonPreferences):
+class MMDToolsAddonPreferences(AddonPreferences):
     # this must match the addon name, use '__package__'
     # when defining this in a submodule of a python package.
     bl_idname = __name__
 
-    shared_toon_folder = bpy.props.StringProperty(
+    shared_toon_folder = StringProperty(
             name="Shared Toon Texture Folder",
             description=('Directory path to toon textures. This is normally the ' +
                          '"Data" directory within of your MikuMikuDance directory'),
             subtype='DIR_PATH',
             )
-    base_texture_folder = bpy.props.StringProperty(
+    base_texture_folder = StringProperty(
             name='Base Texture Folder',
             description='Path for textures shared between models',
             subtype='DIR_PATH',
             )
-    dictionary_folder = bpy.props.StringProperty(
+    dictionary_folder = StringProperty(
             name='Dictionary Folder',
             description='Path for searching csv dictionaries',
             subtype='DIR_PATH',
             default=__file__[:-11],
-            )
-    non_collision_threshold = bpy.props.FloatProperty(
-            name='Non-Collision Threshold',
-            description='The distance threshold for creating extra non-collision constraints while building physics',
-            min=0,
-            soft_max=10,
-            default=1.5,
             )
 
     def draw(self, context):
@@ -92,7 +89,6 @@ class MMDToolsAddonPreferences(bpy.types.AddonPreferences):
         layout.prop(self, "shared_toon_folder")
         layout.prop(self, "base_texture_folder")
         layout.prop(self, "dictionary_folder")
-        layout.prop(self, "non_collision_threshold")
 
 
 def menu_func_import(self, context):
@@ -124,6 +120,7 @@ def register():
         bpy.utils.register_class(cls)
     print(__name__, 'registed %d classes'%len(__bl_classes))
     properties.register()
+    pie.register()
     bpy.app.handlers.load_post.append(load_handler)
     bpy.types.VIEW3D_HT_header.append(header_view3d_pose_draw)
     if bpy.app.version < (2, 80, 0):
@@ -149,6 +146,7 @@ def unregister():
     bpy.types.VIEW3D_HT_header.remove(header_view3d_pose_draw)
     bpy.app.handlers.load_post.remove(load_handler)
     properties.unregister()
+    pie.unregister()
     for cls in reversed(__bl_classes):
         bpy.utils.unregister_class(cls)
 
