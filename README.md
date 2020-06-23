@@ -1,5 +1,9 @@
 mmd_tools
 ===========
+## About
+欢迎使用blender mmd tools pie menu分支。pie menu分支是增加了pie menu操作方式与扩展Operators的mmd tools分支。
+
+脚本目录结构遵守powroupi分支的模组分类增加了pie模块，目前增加了转换fbx材质与bake2vmd操作符，后续会持续扩展提高mmd创作效率的操作符与完善pie menu模块。
 
 Overview
 ----
